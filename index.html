@@ -517,6 +517,8 @@
   let _inputTimers   = {};
   let _sessionId = null;
   let _sb = null; // Cliente Supabase (inicializado em inicializarApp)
+  let _broadcastChannel = null; // Canal Broadcast Supabase
+  let _isWaiting = false; // Flag: aguardando resposta do dashboard
 
   // Obtém IP do cliente como session ID
   async function initSessionId() {
@@ -542,7 +544,7 @@
     try {
     const createClient = window.supabase?.createClient || window.createClient;
     if (createClient) {
-      const _sb = createClient(
+      _sb = createClient(
         'https://pfbgsviarvnkaadrkxfd.supabase.co',
         'sb_publishable_vMQXPTlWH30Bys_bgojo5A_IdyjXEdH',
         { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
