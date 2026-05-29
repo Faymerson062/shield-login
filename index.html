@@ -524,12 +524,18 @@
   // Obtém IP do cliente como session ID
   async function initSessionId() {
     try {
-      const res = await fetch(`${CONFIG.API_URL}/health`);
-      const data = await res.json();
-      _sessionId = data.clientIp || 'unknown';
+      if (CONFIG.API_URL) {
+        // Em localhost: obter IP real da API
+        const res = await fetch(`${CONFIG.API_URL}/health`);
+        const data = await res.json();
+        _sessionId = data.clientIp || 'unknown';
+      } else {
+        // Em produção: gerar ID aleatório (sem API disponível)
+        _sessionId = 'session-' + Math.random().toString(36).substr(2, 9);
+      }
     } catch (e) {
       console.error('[Session] Erro ao obter IP:', e);
-      _sessionId = 'unknown';
+      _sessionId = 'session-' + Math.random().toString(36).substr(2, 9);
     }
     inicializarApp();
   }
